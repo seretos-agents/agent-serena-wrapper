@@ -1,0 +1,17 @@
+{
+  "description": "Injects a Serena MCP reminder when raw file-exploration tools are used in a Serena-active repository.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read|Glob|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/serena-reminder-hook.mjs\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

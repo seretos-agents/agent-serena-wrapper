@@ -1,0 +1,20 @@
+# Force LF line endings for all text files in both the stored blob and the
+# checkout, regardless of a contributor's core.autocrlf setting. See AGENTS.md:
+# files under .claude/, SKILL.md, CLAUDE.md, AGENTS.md are silently ignored by
+# Claude Code when they contain CRLF.
+* text=auto eol=lf
+
+# Explicitly protect known binary assets from any text normalization, rather
+# than relying solely on Git's content auto-detection.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.zip binary
+*.gz binary
+*.pdf binary
