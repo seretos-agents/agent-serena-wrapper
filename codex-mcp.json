@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "serena": {
+      "command": "node",
+      "args": [
+        "./scripts/serena-boot-wrapper.mjs",
+        "--from", "serena-agent==1.5.3",
+        "serena", "start-mcp-server",
+        "--transport", "stdio",
+        "--context", "codex",
+        "--enable-web-dashboard", "False",
+        "--enable-gui-log-window", "False"
+      ],
+      "cwd": "."
+    }
+  }
+}

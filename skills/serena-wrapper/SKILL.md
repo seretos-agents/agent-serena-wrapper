@@ -31,14 +31,18 @@ Use this skill whenever you need to navigate, understand, or safely modify an un
 
 ## Mental model
 
-Serena models a codebase as a **symbol graph**: files contain classes; classes contain methods and fields; references between symbols are tracked edges. When the MCP server starts, it activates the project at startup — the Claude Code variant uses `--project ${CLAUDE_PROJECT_DIR}` (the directory Claude Code is opened on), while the Codex variant uses `--project-from-cwd` (walking up from the process CWD to find `.serena/project.yml` or `.git`). Once a project is active, every symbol query operates against that graph rather than raw text.
+Serena models a codebase as a **symbol graph**: files contain classes; classes contain methods and fields; references between symbols are tracked edges. When the MCP server starts, only the Claude Code variant activates a project at startup, via `--project ${CLAUDE_PROJECT_DIR}` (the directory Claude Code is opened on). The Codex variant starts **projectless**: Codex's own declaration launches Serena with `cwd: "."`, which resolves to the plugin's own install directory, not the user's workspace — Codex supplies no workspace path at MCP-server spawn time, so nothing safe to bind to exists yet. Under Codex you must call `activate_project` with the workspace root yourself before any other Serena call (see "Codex: activate the project before first use" below). Once a project is active, every symbol query operates against that graph rather than raw text.
 
 Key concepts:
 
 - **Project** — a root directory Serena has indexed. Must be active before any symbol query.
 - **Symbol** — any named code entity: class, function, method, field, variable, module.
-- **Active project** — the project currently loaded into the Serena session. This is resolved automatically at startup from the launch flags in the plugin manifest.
+- **Active project** — the project currently loaded into the Serena session. Under Claude Code this resolves automatically at startup from the launch flags in the plugin manifest; under Codex it stays unset until you call `activate_project` yourself.
 - **Symbol path** — a dotted or slash-delimited path that uniquely identifies a symbol, e.g. `mypackage.mymodule.MyClass.my_method`.
+
+### Codex: activate the project before first use
+
+Codex's plugin declaration (`codex-mcp.json`) starts Serena with `cwd: "."`, which Codex resolves to the plugin's own install directory — never the user's workspace, since Codex supplies no workspace hint at server-spawn time. Concretely: **before your first `find_symbol`, `get_symbols_overview`, or any other Serena call in a Codex session, call `activate_project` with the workspace root** (the directory Codex was opened in). Skip this and every symbol query runs against the plugin's own install directory instead of the user's code.
 
 ### Project memory store
 

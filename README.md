@@ -2,7 +2,7 @@
 
 A Claude Code **skill** plugin. Pairs the Serena MCP server with a skill so Claude works with code through token-efficient semantic operations instead of reading whole files.
 
-This plugin bundles a headless Serena MCP server declared inline in both plugin manifests. When the skill is installed, the host agent launches Serena automatically via `uvx` — no manual server setup required. The Claude Code plugin passes `--project ${CLAUDE_PROJECT_DIR}` so Serena is rooted at the exact sub-repo Claude Code is opened on, which fixes monorepo layouts where the process CWD would resolve to the wrong root. The Codex plugin retains `--project-from-cwd` (CWD auto-detection) because Codex does not define `CLAUDE_PROJECT_DIR`. In either case no manual project activation is needed for standard repository layouts.
+This plugin bundles a headless Serena MCP server. When the skill is installed, the host agent launches Serena automatically via `uvx` — no manual server setup required. The Claude Code plugin declares the server inline and passes `--project ${CLAUDE_PROJECT_DIR}` so Serena is rooted at the exact sub-repo Claude Code is opened on, which fixes monorepo layouts where the process CWD would resolve to the wrong root; no manual project activation is needed there. The Codex plugin points at a separate `codex-mcp.json` declaration instead, because Codex does not expand `${...}` placeholders in `args` — that file uses plugin-relative `./` paths and `cwd: "."`, and Codex supplies no workspace hint at server-spawn time, so it starts Serena projectless and the model must call `activate_project` with the workspace root before its first Serena call (see the skill's Codex section).
 
 ## Prerequisites
 

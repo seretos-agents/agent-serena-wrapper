@@ -24,7 +24,9 @@ files, the agent works with code through precise semantic operations.
   sessions instead of being re-derived every time.
 - **Monorepo-correct rooting** — the Claude Code plugin roots Serena at
   `CLAUDE_PROJECT_DIR`, so it resolves the exact sub-repo you opened rather than
-  the process working directory; the Codex plugin auto-detects from the CWD.
+  the process working directory; the Codex plugin starts projectless and
+  activates the workspace on first use instead, since Codex gives it no
+  workspace hint at server-spawn time.
 - **Automatic usage reminder** — a `PreToolUse` hook nudges the agent toward
   Serena's semantic tools when it reaches for `Read`/`Glob`/`Grep`, and stays a
   silent no-op in repositories that don't use Serena.
