@@ -21,7 +21,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { stageTree, resolveCodexServer } from "./codex-staged-server.mjs";
 
 const OVERALL_TIMEOUT_MS = 600000; // cold `uvx` download/build of Serena's env
