@@ -299,13 +299,25 @@ jobs:
 
       - name: Validate release/skill artifacts are LF-only (no CR bytes)
         run: |
-          for f in skills/serena-wrapper/SKILL.md README.md description.md .github/workflows/lint.yml .github/workflows/release.yml .github/scripts/*.sh tests/test_release_scripts.py; do
+          for f in skills/serena-wrapper/SKILL.md README.md description.md codex-mcp.json docs/codex-live-check.md .github/workflows/lint.yml .github/workflows/release.yml .github/scripts/*.sh tests/test_release_scripts.py; do
             if grep -qU $'\r' "$f"; then
               echo "::error::$f contains CR bytes (must be LF-only)"
               exit 1
             fi
           done
           echo "LF-only artifact test: PASS"
+
+  codex-handshake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv (for uvx)
+        uses: astral-sh/setup-uv@v5
+
+      - name: Test Codex handshake against the release-staged declaration (ticket #47)
+        run: node scripts/codex-handshake.test.mjs
 
   release-scripts:
     name: release-scripts (${{ matrix.os }})

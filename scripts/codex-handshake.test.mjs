@@ -211,10 +211,58 @@ async function runHandshake(server, workspaceDir, deadline) {
     err.message += `\n      stderr tail: ${JSON.stringify(stderr.slice(-4000))}\n      exit: ${JSON.stringify(exitInfo)}`;
     throw err;
   } finally {
+    killTree(child);
+  }
+}
+
+/**
+ * Kill `child` and, on win32, its whole descendant tree by PID — not by
+ * image name. `child.kill()` alone only signals the immediate child (the
+ * node boot wrapper); the wrapper's own `spawnSync("uvx", ...)` call spawns
+ * uv's grandchildren (python, the actual serena process) which are not
+ * necessarily reaped when the wrapper dies, and one of them may still hold
+ * `server.cwd` (the staged temp dir) as its own current directory — which
+ * Windows locks, causing the test's `fs.rmSync(dest, ...)` cleanup to fail
+ * with EPERM even though the handshake assertions above already passed.
+ * `taskkill /PID <pid> /T /F` is scoped to exactly this one process's
+ * descendants; it must never be replaced with an image-name-based kill
+ * (`/IM uvx.exe` etc.), which would reach unrelated processes on a shared
+ * machine running other sessions.
+ */
+function killTree(child) {
+  if (child.pid && process.platform === "win32") {
     try {
-      child.kill();
+      spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+      return;
     } catch {
-      // already exited
+      // fall through to the plain kill below
+    }
+  }
+  try {
+    child.kill();
+  } catch {
+    // already exited
+  }
+}
+
+/**
+ * Delete `dir` recursively, retrying briefly if Windows still has a
+ * just-killed process's file handle open (EPERM/EBUSY on a fresh kill is
+ * transient — the handle releases within milliseconds of process exit).
+ * Logs and swallows a final persistent failure rather than letting cleanup
+ * noise overwrite the test's real pass/fail result.
+ */
+function rmDirRetrying(dir, label) {
+  const deadline = Date.now() + 5000;
+  for (;;) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+      return;
+    } catch (err) {
+      if (Date.now() >= deadline) {
+        console.log(`      (cleanup) could not remove ${label} (${dir}): ${err.message}`);
+        return;
+      }
     }
   }
 }
@@ -281,8 +329,8 @@ await test(
         ".serena/ was created under the staged plugin root — the plugin dir was treated as the project"
       );
     } finally {
-      fs.rmSync(dest, { recursive: true, force: true });
-      fs.rmSync(ws, { recursive: true, force: true });
+      rmDirRetrying(dest, "staged tree");
+      rmDirRetrying(ws, "fixture workspace");
     }
   }
 );

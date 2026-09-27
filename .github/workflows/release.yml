@@ -120,24 +120,7 @@ jobs:
         shell: bash
         run: |
           STAGE="build/stage/agent-serena-wrapper"
-          rm -rf "$STAGE"
-          mkdir -p "$STAGE/.claude-plugin" "$STAGE/.codex-plugin" "$STAGE/skills"
-          cp .claude-plugin/plugin.json "$STAGE/.claude-plugin/"
-          cp .codex-plugin/plugin.json  "$STAGE/.codex-plugin/"
-          cp -a skills/. "$STAGE/skills/"
-          cp README.md "$STAGE/"
-          cp LICENSE "$STAGE/" 2>/dev/null || true
-          # description.md goes onto the orphan release branch so the dispatch
-          # payload's description_url (raw.githubusercontent.com/${repo}/${TAG}/
-          # description.md) resolves.
-          cp description.md "$STAGE/"
-          # assets/ goes onto the orphan release branch so the dispatch
-          # payload's icon URL (raw.githubusercontent.com/${repo}/${TAG}/
-          # assets/icon.png) resolves.
-          [ -d assets ] && cp -a assets "$STAGE/" || true
-          # hooks/ and scripts/ must ship so the PreToolUse hook command resolves.
-          [ -d hooks ]   && cp -a hooks   "$STAGE/" || true
-          [ -d scripts ] && cp -a scripts "$STAGE/" || true
+          bash .github/scripts/stage-tree.sh "$STAGE"
 
           mkdir -p dist
           ZIPNAME="agent-serena-wrapper-${VERSION}.zip"

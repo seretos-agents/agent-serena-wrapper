@@ -10,16 +10,14 @@
  * Usage (replaces `uvx` as the MCP server command):
  *   node scripts/serena-boot-wrapper.mjs [uvx-args...]
  *
- * The wrapper rewrites a Codex-style `--project-from-cwd` token into
- * `--project <process.cwd()>` before forwarding argv to uvx — Serena 1.5.3's
- * `--project-from-cwd` walks ancestor directories for `.serena/project.yml`
- * before it checks `.git`, so a workspace nested under a directory that has
- * its own `project.yml` would otherwise activate the ancestor's project
- * instead. An explicit `--project` bypasses that discovery entirely. The
- * Claude manifest already passes `--project ${CLAUDE_PROJECT_DIR}` and is
- * forwarded unchanged. It then scans (rewritten) argv for `--project <dir>`
- * to locate the project to heal. If `--project` is absent, the heal step is
- * skipped and uvx is spawned directly.
+ * The wrapper scans argv verbatim for `--project <dir>` to locate the
+ * project to heal before forwarding argv to uvx unchanged. The Claude
+ * manifest passes `--project ${CLAUDE_PROJECT_DIR}`, so the heal runs
+ * against the workspace. The Codex declaration (`codex-mcp.json`) passes no
+ * `--project` at all — Codex supplies no workspace hint at spawn time, and
+ * `cwd: "."` there resolves to the plugin's own install directory, so
+ * healing against it would be healing the wrong directory. If `--project`
+ * is absent, the heal step is skipped and uvx is spawned directly.
  *
  * Windows compatibility: spawnSync with shell:false resolves PATH and appends
  * .exe automatically — "uvx" works cross-platform.
@@ -106,17 +104,10 @@ export function healProjectYml(projectDir) {
 export function run(argv, overrides = {}) {
   const spawnFn = overrides.spawnSync ?? spawnSync;
 
-  // Rewrite Codex's --project-from-cwd into an explicit --project <cwd>,
-  // in place, before anything else inspects argv. Serena's own discovery
-  // (ancestor-first) is bypassed once --project is explicit.
-  const forwarded = argv.flatMap((a) =>
-    a === "--project-from-cwd" ? ["--project", process.cwd()] : [a]
-  );
-
-  // Locate --project <dir> in the forwarded argv.
-  const projectIdx = forwarded.indexOf("--project");
-  if (projectIdx !== -1 && projectIdx + 1 < forwarded.length) {
-    const projectDir = path.resolve(forwarded[projectIdx + 1]);
+  // Locate --project <dir> in argv.
+  const projectIdx = argv.indexOf("--project");
+  if (projectIdx !== -1 && projectIdx + 1 < argv.length) {
+    const projectDir = path.resolve(argv[projectIdx + 1]);
     // Best-effort heal — never let an error block the spawn.
     try {
       healProjectYml(projectDir);
@@ -124,9 +115,9 @@ export function run(argv, overrides = {}) {
       // Silently discard — uvx must always start.
     }
   }
-  // If --project is absent (neither manifest emitted it): skip heal entirely.
+  // If --project is absent (the Codex manifest emits none): skip heal entirely.
 
-  const result = spawnFn("uvx", forwarded, { stdio: "inherit", shell: false });
+  const result = spawnFn("uvx", argv, { stdio: "inherit", shell: false });
   if (result.error) {
     // Report on stderr (never stdout: that is the MCP channel) so a host's
     // bare "connection closed" is diagnosable.
