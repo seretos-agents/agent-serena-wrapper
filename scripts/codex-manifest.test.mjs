@@ -23,6 +23,7 @@ import process from "node:process";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { run } from "./serena-boot-wrapper.mjs";
+import { stageTree, resolveCodexServer } from "./codex-staged-server.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -272,6 +273,99 @@ function assertRewrittenToProjectCwd(recorded, codexArgs, ws) {
 }
 
 const uvxStub = makeUvxStub();
+
+// ---------------------------------------------------------------------------
+// #47 R1 — the release-staged Codex declaration resolves with only
+// Codex-supplied inputs (no ${PLUGIN_ROOT} substitution, no .mcp.json
+// double-registration, no --project flag reaching uvx).
+// ---------------------------------------------------------------------------
+
+test("staged codex declaration resolves without placeholder expansion", () => {
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), "codex-staged-"));
+  try {
+    const staged = stageTree(dest);
+    assert(!staged.error, `stageTree failed to run: ${staged.error?.message}`);
+    assertEqual(
+      staged.status,
+      0,
+      `stage-tree.sh exit status (stderr: ${staged.stderr ?? ""})`
+    );
+
+    const server = resolveCodexServer(dest);
+    assertEqual(server.command, "node", "command");
+    for (const a of server.args) {
+      assert(!a.includes("${"), `unsubstituted placeholder left in arg: ${a}`);
+    }
+    const scriptPath = path.resolve(server.cwd, server.args[0]);
+    assert(fs.existsSync(scriptPath), `args[0] does not resolve to a file on disk: ${scriptPath}`);
+
+    // Launch the resolved command itself, with PATH holding only node's own
+    // directory, so a placeholder or unresolvable path fails the launch
+    // rather than something downstream (uvx) papering over it.
+    const nodeDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-staged-node-"));
+    const nodeName = path.basename(process.execPath);
+    fs.copyFileSync(process.execPath, path.join(nodeDir, nodeName));
+    const env = { ...process.env, PATH: nodeDir, Path: nodeDir };
+    const result = spawnSync(server.command, server.args, {
+      cwd: server.cwd,
+      env,
+      encoding: "utf8",
+      timeout: 30000,
+    });
+    assert(!result.error, `could not launch declared command ${JSON.stringify(server.command)}: ${result.error?.message}`);
+    const stderr = result.stderr ?? "";
+    assert(
+      !/Cannot find module|MODULE_NOT_FOUND|ERR_UNKNOWN_FILE_EXTENSION/.test(stderr),
+      `node failed to load the staged launch script: ${stderr.split("\n")[0]}`
+    );
+    // MCP stdio: stdout carries the protocol; the wrapper must not pollute it.
+    assertEqual(result.stdout ?? "", "", "stdout of the spawned wrapper");
+  } finally {
+    fs.rmSync(dest, { recursive: true, force: true });
+  }
+});
+
+test("staged tree has no .mcp.json/mcp.json for Claude Code to double-register serena from", () => {
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), "codex-staged-nomcp-"));
+  try {
+    const staged = stageTree(dest);
+    assert(!staged.error, `stageTree failed to run: ${staged.error?.message}`);
+    assertEqual(staged.status, 0, `stage-tree.sh exit status (stderr: ${staged.stderr ?? ""})`);
+    assert(!fs.existsSync(path.join(dest, ".mcp.json")), "staged tree contains .mcp.json");
+    assert(!fs.existsSync(path.join(dest, "mcp.json")), "staged tree contains mcp.json");
+  } finally {
+    fs.rmSync(dest, { recursive: true, force: true });
+  }
+});
+
+test("staged codex declaration argv reaches uvx stub verbatim, with no --project flag", () => {
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), "codex-staged-argv-"));
+  try {
+    const staged = stageTree(dest);
+    assert(!staged.error, `stageTree failed to run: ${staged.error?.message}`);
+    assertEqual(staged.status, 0, `stage-tree.sh exit status (stderr: ${staged.stderr ?? ""})`);
+
+    const server = resolveCodexServer(dest);
+    const scriptPath = path.resolve(server.cwd, server.args[0]);
+    const { status, recorded, logExists } = runWrapper(
+      [scriptPath, ...server.args.slice(1)],
+      server.cwd,
+      uvxStub
+    );
+
+    assertEqual(status, 0, "wrapper exit status");
+    assert(logExists, "uvx stub log was not written — uvx was not launched from PATH");
+    assert(!recorded.includes("--project-from-cwd"), `--project-from-cwd forwarded: ${JSON.stringify(recorded)}`);
+    assert(!recorded.includes("--project"), `unexpected --project flag in staged codex argv: ${JSON.stringify(recorded)}`);
+    assertEqual(
+      JSON.stringify(recorded),
+      JSON.stringify(server.args.slice(1)),
+      "staged codex argv forwarded verbatim"
+    );
+  } finally {
+    fs.rmSync(dest, { recursive: true, force: true });
+  }
+});
 
 test("boot-wrapper: codex argv under an ancestor .serena project → uvx gets --project <cwd>", () => {
   const parent = fs.mkdtempSync(path.join(os.tmpdir(), "codex-ancestor-"));
